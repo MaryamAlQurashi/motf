@@ -1,18 +1,36 @@
+"""
+Prerequisites
+
+* Install the necessary modules as follows
+
+    mkvirtualenv --python /usr/local/bin/python3.8 sniffer
+    workon sniffer
+    pip install -r requirements.txt
+
+The run the application
+    
+    python test.py
+
+"""
+
 import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
-#import pymongo
-from scapy.all import *
-from pymongo import *
+import pymongo
+from scapy.all import sniff
+import scapy_http.http
 from scapy.layers.http import HTTPRequest
 
 
 
-filter = "ip and tcp and port 80"
 start = 0
-# Packet capturing process
+
 def process_packet(packet):
-    http_packet=str(packet)
-    
+    """
+    Process each packet individually
+    """
+
+    http_packet = packet.getlayer(scapy_http.http.HTTPRequest)
+
     if IP in packet:
         ip_src=packet[IP].src
         ip_dst=packet[IP].dst
@@ -20,6 +38,13 @@ def process_packet(packet):
         tcp_sport=packet[TCP].sport
         tcp_dport=packet[TCP].dport
         
+    # Look at the following methods to get some more detail:
+    # http_packet.display
+    # http_packet.show()
+    # http_packet.fields - provides a dictionary of fields
+
+    # I'm not clear what you're trying to do here. Maybe you mean ..
+    # if (http_packet.fields.get("Method") == "GET"): ...?
     if http_packet.find('GET'):
             return GET_print(packet)
         
@@ -78,10 +103,21 @@ def process_packet(packet):
     # Sniffing Command   
     
 def GET_print(packet1):
+    """
+    Good to add what this function is for, and the parameters
+    """
     ret = "***************************************GET PACKET****************************************************\n"
     ret += "\n".join(packet1.sprintf("{Raw:%Raw.load%}\n").split(r"\r\n"))
     ret += "*****************************************************************************************************\n"
     return ret
 
-sniff(iface='en0', filter=filter, store=0, prn=process_packet)
+if __name__ == "__main__":
+    interface = "en0"   # bind to the first wireless interface
+    pkt_filter = "ip and tcp and port 80"
+
+    sniff(iface='en0', filter=pkt_filter, 
+          lfilter=lambda x: x.haslayer(scapy_http.http.HTTPRequest),
+          store=0, 
+          prn=process_packet)
+
 
