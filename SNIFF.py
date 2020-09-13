@@ -72,15 +72,7 @@ def process_packet(packet):
     
 
     # Printing packet details
-    print (packet.name)
-    print (packet.src)
-    print (packet.dst)
-    print (packet.sniffed_on)
-    print (ip_src)
-    print (ip_dst)
-    print (tcp_sport)
-    print (tcp_dport) 
-    print (tcp_payload)
+    print (pkt_rec1)
 
 
     
