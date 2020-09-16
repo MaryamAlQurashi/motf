@@ -13,8 +13,7 @@ from scapy.layers.http import HTTPResponse
 
 
 # filter
-filter = "ip and tcp and port 80"
-### DB
+filter = input("[*] Enter desired filter: ")### DB
 start = 0
 # Packet capturing process
 def process_packet(packet):
@@ -22,6 +21,10 @@ def process_packet(packet):
     if IP in packet:
         ip_src=packet[IP].src
         ip_dst=packet[IP].dst
+        if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0:
+            DNS_qname=(packet.getlayer(DNS).qd.qname)
+            print (DNS_qname)
+            
     if TCP in packet:
         tcp_sport=packet[TCP].sport
         tcp_dport=packet[TCP].dport
@@ -53,7 +56,8 @@ def process_packet(packet):
                 "IP destination": (ip_dst),
                 "Source port": (tcp_sport),
                 "Destination port": (tcp_dport),
-                "HTTP payload": (tcp_payload)
+                "HTTP payload": (tcp_payload),
+                "DNS qname" : (DNS_qname)
             
                 } 
         # Inserting 
@@ -80,7 +84,7 @@ def process_packet(packet):
     
 
 
-sniff(iface='en0', filter=filter, store=0, prn=process_packet)
+sniff(iface='en0', filter=print(filter), store=0, prn=process_packet)
 
 
 
