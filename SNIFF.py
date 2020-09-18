@@ -6,14 +6,16 @@
 import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 from scapy.all import *
+load_layer('tls')
 from pymongo import *
 from scapy.layers.http import HTTPRequest
 from scapy.layers.http import HTTPResponse
+import sys
 
 
 
 # filter
-filter = input("[*] Enter desired filter: ")### DB
+filter = input("[*] Enter desired filter: ")
 start = 0
 # Packet capturing process
 def process_packet(packet):
@@ -29,6 +31,21 @@ def process_packet(packet):
         tcp_sport=packet[TCP].sport
         tcp_dport=packet[TCP].dport
         tcp_payload= str(bytes(packet[TCP].payload))
+        if packet.haslayer(Raw):
+            b = bytes(packet[Raw].load)
+            if b[0] == 0x16:
+                version =  int.from_bytes(b[1:3], 'big')
+                message_len = int.from_bytes(b[3:5], 'big')
+                handshake_type = b[5]
+                handshake_length = int.from_bytes(b[6:9], 'big')
+                print("v = ", version, " len = ", message_len, " htype =", handshake_type
+                , "hlen =", handshake_length)
+
+            
+
+                if handshake_type == 11:
+                    # never happens 
+                    certs_len = int.from_bytes(b[7:11], 'big')
         
 
     # Connecting to MongoDB    
@@ -57,7 +74,8 @@ def process_packet(packet):
                 "Source port": (tcp_sport),
                 "Destination port": (tcp_dport),
                 "HTTP payload": (tcp_payload),
-                "DNS qname" : (DNS_qname)
+                "DNS qname" : (DNS_qname),
+                "Raw Data" : (b)
             
                 } 
         # Inserting 
@@ -76,7 +94,7 @@ def process_packet(packet):
     
 
     # Printing packet details
-    print (pkt_rec1)
+    #print (pkt_rec1)
 
 
     
@@ -84,7 +102,7 @@ def process_packet(packet):
     
 
 
-sniff(iface='en0', filter=print(filter), store=0, prn=process_packet)
+sniff(filter=print(filter), prn=process_packet)
 
 
 
