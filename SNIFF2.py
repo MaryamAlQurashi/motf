@@ -18,10 +18,10 @@ class Sniffer:
             print("Could not connect to MongoDB") 
 
 
-        # database 
+     
         db = conn.database 
 
-        # Created or Switched to collection names
+       
         collection = db.SNIFF
         
     def add_to_db():
@@ -50,17 +50,17 @@ class Sniffer:
         if IP in packet:
             ip_src=packet[IP].src
             ip_dst=packet[IP].dst
-            #print(packet.summary)
+          
             if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0:
                 DNS_qname=(packet.getlayer(DNS).qd.qname)
                 print (DNS_qname)
-                #print(packet.summary)
+                
 
         if TCP in packet:
             tcp_sport=packet[TCP].sport
             tcp_dport=packet[TCP].dport
             tcp_payload= str(bytes(packet[TCP].payload))
-            #print(packet.summary)
+            
             if packet.haslayer(Raw):
                 b = bytes(packet[Raw].load)
                 if b[0] == 0x16:
@@ -72,7 +72,7 @@ class Sniffer:
                     , "hlen =", handshake_length)
 
                 if handshake_type == 11:
-                    # never happens 
+                    
                     certs_len = int.from_bytes(b[7:11], 'big')
 
     
