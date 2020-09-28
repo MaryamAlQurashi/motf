@@ -1,116 +1,113 @@
-# ==========================================LIBRARIES======================================== #
-
 import logging
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 from scapy.all import *
-from datetime import * 
 from pymongo import *
-from scapy.layers.http import *
-load_layer("http")
+from scapy.layers.http import HTTPRequest
+from scapy.layers.http import HTTPResponse
 import sys
-from scapy.sessions import *
 
+#filter = input("Please enter desired filter: ")
+class MOTFSniffer():
+    conn = None # Database connection handle
+    db_url = None     # Database connection URL
+    packet = None   # Sniffed packed that we need to process
+    collection = None   # Name of the MongoDB Collection/Table
 
-
-now = datetime.now()
-filter = input("[*] Enter desired filter: ")
-start = 0
-
-# ===========================================DB CLASS=========================================== #
-
-class Sniffer:
-
-    def connecttoDB(self):
-        global conn
+    def __init__(self, db_url=None):
+        self.db_url = db_url
+        self.connect_to_db()
+        self.validateSniffer()
         
-        if start ==0:
-            try: 
-                conn = MongoClient() 
-                print("Connected successfully!!!") 
-            except: 
-                print("Could not connect to MongoDB") 
+        
+    def validateSniffer(self):
+        '''
+        checking if sniffer is working
+        '''
+        try: 
+            sniff(count=1)
+            print("Sniffer running successfully") 
+        except: 
+            print("Could not sniff packets") 
 
+    def connect_to_db(self):
+        '''
+        connecting to databse and accessing a collection
+        '''        
+        self.conn = MongoClient()
+        db = self.conn.database
+        print("Connected to Mongo")
+        self.collection = db.sn   # Or whatever your Collection is called
+        print("Accessed collection")
+    
+    
+        '''
+        Packet is provided to the method by the sniff() function, so you can use it directly
+        '''
+        
+    def parse_packet_ip_layer(self, packet):
+        print ("Parsing IP Layer")
+        packet_data = {}
+        packet_data['ip_src'] = packet[IP].src
+        packet_data['ip_dst'] = packet[IP].dst
+        packet_data['TTL'] = packet[IP].ttl
+        packet_data['Protocol'] = packet[IP].proto
+        if HTTPResponse in packet:
+            # status codes are only in responses
+            packet_data['statuscode'] = packet[HTTPResponse].Status_Code
 
-            # database 
-            db = conn.database 
-
-            # Created or Switched to collection names
-            collection = db.httpresponse
+        if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0:
+            packet_data['DNS_qname'] =(str(packet.getlayer(DNS).qd.qname))
             
-    def insertDB(self):
-        global conn, packet
-        self.connecttoDB()
         
-        pkt_rec1 = { 
-                    "Time": (now),
-                    "interface": (packet.sniffed_on),
-                    "IP source": (ip_src),
-                    "IP destination": (ip_dst),
-                    "Source port": (sport),
-                    "Destination port": (dport),
-                    "Protocol" : (Protocol),
-                    "TTL" : (TTL),
-                    "DNS QR" : (DNS_qname),
-                    "Status Code" : (statuscode)
-                    #"App Protocol" : (app_pr)
-                
-                    }
+        return packet_data
+            
+    def parse_packet_tcp_layer(self,packet):
+        print ("Parsing TCP Layer")
+        packet_data = {}
+        packet_data['sport']=packet[TCP].sport
+        packet_data['dport']=packet[TCP].dport
+        return packet_data
         
-        rec_id1 = collection.insert_one(pkt_rec1)
-        rec_id1
+    def parse_packet_udp_layer(self,packet):
+        print ("Parsing UDP Layer")
+        packet_data = {}
+        packet_data['sport']=packet[UDP].sport
+        packet_data['dport']=packet[UDP].dport
+        return packet_data
+            
         
     
-    def process_packet(packet):
+    def read_and_save(self, packet):
+        ''' reading packets and inserting packet info to database collection
+        '''
+        
         if packet.haslayer(IP):
-            ip_src = packet[IP].src
-            ip_dst = packet[IP].dst
-            TTL = packet[IP].ttl
-            Protocol = packet[IP].proto
-            if HTTPResponse in packet:
-                # status codes are only in responses
-                statuscode = packet[HTTPResponse].Status_Code
-            else:
-                statuscode = ("None")
-
-            if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0:
-                    DNS_qname=(str(packet.getlayer(DNS).qd.qname))
-                    print (DNS_qname)
-            else:
-                DNS_qname= ("None")
-        
-            #if packet.haslayer(ARP):
-                #app_pr = "ARP"
-            #if packet.haslayer(ICMP):
-                #app_pr = "ICMP"
-            #else:
-                #app_pr = "Error"
-                
-                        
+            packet_final = self.parse_packet_ip_layer(packet)
+            
         if packet.haslayer(TCP):
-            sport=packet[TCP].sport
-            dport=packet[TCP].dport
+            packet_final = self.parse_packet_tcp_layer(packet)
             
-        elif packet.haslayer(UDP):
-            sport=packet[UDP].sport
-            dport=packet[UDP].dport
-            
-            
-    
-    
-    
-    def main(self):
-        global conn, packet
-        process_packet = self.process_packet()
-        self.connecttoDB()
-        sniff(filter=(filter), prn=process_packet)
-        self.insertDB()
+        if packet.haslayer(UDP):
+            packet_final = self.parse_packet_udp_layer(packet)
+            # Finally save the packet to the database
+        
+        self.collection.insert_one(packet_final)
+        print("Packets sent to MongoDB Collection (-)")
         
 
 
+    def main(self):
+        ''' 
+        starting the sniffing process
+        '''
+        sniff(filter="ip and tcp and port 80", prn=self.read_and_save, count = 3)
+        print ("Sniffed (-) packets successfuly")
 
-# =======================================INITIALIZATION======================================= #
-
+            
+    
 
 if __name__ == "__main__":
-    sniffer = Sniffer()
-    sniffer.main()
+    motfs = MOTFSniffer()
+    motfs.main()
+    
