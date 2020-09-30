@@ -17,11 +17,16 @@ class MOTFSniffer():
     db_url = None     # Database connection URL
     packet = None   # Sniffed packed that we need to process
     collection = None   # Name of the MongoDB Collection/Table
+    packet_count = None
+    filter = None
+    interface = None
 
-    def __init__(self, db_url = None):
+    def __init__(self, db_url = None, filter=None, count=None, interface=None):
         self.connect_to_db()
         self.validateSniffer()
-        
+        self.filter = filter
+        self.packet_count = count
+        self.interface = interface
         
     def validateSniffer(self):
         '''
@@ -52,13 +57,14 @@ class MOTFSniffer():
             
     def parse_packet_tcp_layer(self,packet):
         print ("Parsing TCP Layer")
-        packet_data = {}
-        packet_data['ip_src'] = packet[IP].src
-        packet_data['ip_dst'] = packet[IP].dst
-        packet_data['sport']= packet[TCP].sport
-        packet_data['dport']= packet[TCP].dport
-        packet_data['TTL'] = packet[IP].ttl
-        packet_data['Protocol'] = packet[IP].proto
+        packet_data = {
+            'ip_src': packet[IP].src if packet.haslayer(IP) else None,
+            'ip_dst': packet[IP].dst if packet.haslayer(IP) else None,
+            'sport': packet[TCP].sport,
+            'dport': packet[TCP].dport,
+            'TTL': packet[IP].ttl if packet.haslayer(IP) else None,
+            'protocol': packet[IP].proto if packet.haslayer(IP) else None
+        }
         
         if HTTPResponse in packet:
             # status codes are only in responses
@@ -70,8 +76,6 @@ class MOTFSniffer():
             packet_data['DNS_qname'] =(str(packet.getlayer(DNS).qd.qname))
         else:
             packet_data['DNS_qname'] = ("None")
-            
-        
         
         return packet_data
         
@@ -104,8 +108,7 @@ class MOTFSniffer():
     def read_and_save(self, packet):
         ''' reading packets and inserting packet info to database collection
         '''
-        
-            
+         
         if packet.haslayer(TCP):
             packet_final = self.parse_packet_tcp_layer(packet)
             
@@ -122,7 +125,13 @@ class MOTFSniffer():
         ''' 
         starting the sniffing process
         '''
-        sniff(filter= args.filter or "", prn= self.read_and_save, count = args.count)
+        # sniff(filter= self.filter, prn= self.read_and_save, count=self.packet_count)
+        sniff(
+            filter=self.filter,
+            iface=self.interface, 
+            prn=self.read_and_save,
+            count=self.packet_count
+        )
         print ("Sniffed (-) packets successfuly")
 
 
@@ -131,13 +140,14 @@ def get_args():
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument("--db_url", help="DB link", default="mongodb://localhost:27017/")
+    parser.add_argument("--interface", help="Interface to sniff on, such as en0", required=True)
     parser.add_argument(
         "--count",
         type=int,
         help="The number of packets to sniff (integer). 0 (default) is indefinite count.",
         default=1,
     )
-    parser.add_argument("--filter", help="The BPF style filter to sniff with.")
+    parser.add_argument("--filter", help="The BPF style filter to sniff with. Eg. 'tcp port 80'", required=True)
     
     return parser.parse_args()
             
@@ -145,6 +155,6 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    motfs = MOTFSniffer(db_url=args.db_url)
+    motfs = MOTFSniffer(db_url=args.db_url, filter=args.filter, count=args.count, interface=args.interface)
     motfs.main()
     
